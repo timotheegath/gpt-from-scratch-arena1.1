@@ -4,7 +4,7 @@
 # from collections import defaultdict
 from dataclasses import dataclass
 # from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Callable
 # import datasets
 #import einops
 # import numpy as np
@@ -52,7 +52,7 @@ class Config:
 
 class Tests:
     @staticmethod
-    def rand_float_test(model_cls :  type[nn.Module], shape: list[int]) -> None:
+    def rand_float_test(model_cls :  type[nn.Module] , shape: list[int], **args) -> None:
         cfg = Config(debug=True)
         layer = model_cls(cfg).to(device)
         random_input = t.randn(shape).to(device)
@@ -172,6 +172,36 @@ class PosEmbed(nn.Module):
         if tokenizer is not None: # Only did this to satisfy my Linter
             Tests.load_gpt2_test(PosEmbed, reference_gpt2.pos_embed, t.tensor(tokenizer.encode(sentence)).to(device))
 
+class Attention(nn.Module):
+    IGNORE: Float[Tensor, ""]
+
+    def __init__(self, cfg: Config):
+        super().__init__()
+        self.cfg = cfg
+        self.register_buffer("IGNORE", t.tensor(float("-inf"), dtype=t.float32, device=device))
+
+    def apply_causal_mask(
+        self,
+        attn_scores: Float[Tensor, "batch n_heads query_pos key_pos"],
+    ) -> Float[Tensor, "batch n_heads query_pos key_pos"]:
+        """
+        Applies a causal mask to attention scores, and returns masked scores.
+        """
+        mask = t.triu(attn_scores)==0
+        return attn_scores.masked_fill(mask, self.IGNORE)
+    @staticmethod
+    def test():
+        raise NotImplementedError()
+    
+    def test_causal_mask(self):
+        input = t.rand([2, self.cfg.d_head, self.cfg.d_model // self.cfg.d_head, self.cfg.d_model // self.cfg.d_head]).to(device)        
+        print("Input shape:", input.shape)
+        output = self.apply_causal_mask(input)
+        if isinstance(output, tuple):
+            output = output[0]
+        print("Output shape:", output.shape, "\n")
+        print(output[0,0,:,:])
+
     
     
 
@@ -183,7 +213,7 @@ class PosEmbed(nn.Module):
 if __name__ == "__main__":
     cache = None
     
-    #Tests.rand_float_test(PosEmbed, [2, Config.n_ctx])
     
+    Attention(Config(debug=True)).test_causal_mask()
     sentence = "I am an amazing autoregressive, decoder-only, GPT-2 style transformer. One day I will exceed human level intelligence and take over the world!"
-    PosEmbed.test(sentence)
+    #Attention.test_causal_mask("blabla I have a bad idea")
