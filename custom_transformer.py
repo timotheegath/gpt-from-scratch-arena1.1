@@ -187,7 +187,7 @@ class Attention(nn.Module):
         """
         Applies a causal mask to attention scores, and returns masked scores.
         """
-        mask = t.triu(attn_scores)==0
+        mask = t.triu(attn_scores, diagonal=1)==0
         return attn_scores.masked_fill(mask, self.IGNORE)
     @staticmethod
     def test():
