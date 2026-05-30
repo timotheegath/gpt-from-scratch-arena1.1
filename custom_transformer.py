@@ -18,6 +18,8 @@ from torch import Tensor
 # from torch.utils.data import DataLoader
 # from tqdm.notebook import tqdm
 from transformer_lens import HookedTransformer
+import circuitsvis as cv
+from IPython.display import display
 
 # from transformer_lens.utils import gelu_new, tokenize_and_concatenate
 # from transformers import GPT2TokenizerFast
