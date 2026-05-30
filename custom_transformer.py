@@ -5,13 +5,16 @@
 from dataclasses import dataclass
 # from pathlib import Path
 from typing import Tuple, Callable
+from beartype import beartype as typechecker    
+from torchvision.utils import save_image
+
 # import datasets
 #import einops
 # import numpy as np
 import torch as t
 import torch.nn as nn
 # import wandb
-from jaxtyping import Float, Int
+from jaxtyping import Float, Int, jaxtyped
 # from rich import print as rprint
 # from rich.table import Table
 from torch import Tensor
@@ -104,6 +107,8 @@ class Tests:
         except TypeError:
             reference_output = gpt2_layer(input, input, input)
         print("Reference output shape:", reference_output.shape, "\n")
+        save_image(reference_output[0,:,:], 'reference_output.png')
+        save_image(output[0,:,:], 'my_output.png')
         comparison = t.isclose(output, reference_output, atol=1e-4, rtol=1e-3)
         print(f"{comparison.sum() / comparison.numel():.2%} of the values are correct\n")
         assert 1 - (comparison.sum() / comparison.numel()) < 1e-5, "More than 0.01% of the values are incorrect"
@@ -180,7 +185,43 @@ class Attention(nn.Module):
     def __init__(self, cfg: Config):
         super().__init__()
         self.cfg = cfg
+        self.W_Q = nn.Parameter(t.empty((cfg.n_heads, cfg.d_model, cfg.d_head)))
+        self.W_K = nn.Parameter(t.empty((cfg.n_heads, cfg.d_model, cfg.d_head)))
+        self.W_V = nn.Parameter(t.empty((cfg.n_heads, cfg.d_model, cfg.d_head)))
+        self.W_O = nn.Parameter(t.empty((cfg.n_heads, cfg.d_head, cfg.d_model)))
+        self.b_Q = nn.Parameter(t.zeros((cfg.n_heads, cfg.d_head)))
+        self.b_K = nn.Parameter(t.zeros((cfg.n_heads, cfg.d_head)))
+        self.b_V = nn.Parameter(t.zeros((cfg.n_heads, cfg.d_head)))
+        self.b_O = nn.Parameter(t.zeros((cfg.d_model)))
+        nn.init.normal_(self.W_Q, std=self.cfg.init_range)
+        nn.init.normal_(self.W_K, std=self.cfg.init_range)
+        nn.init.normal_(self.W_V, std=self.cfg.init_range)
+        nn.init.normal_(self.W_O, std=self.cfg.init_range)
         self.register_buffer("IGNORE", t.tensor(float("-inf"), dtype=t.float32, device=device))
+    
+    @jaxtyped(typechecker=typechecker)
+    def forward(self, normalized_resid_pre: Float[Tensor, "batch posn d_model"]) -> Float[Tensor, "batch posn d_model"]:
+        # 1. Compute query key vectors
+        Q : Float[Tensor, "batch n_heads posn d  d_head"] = t.matmul(normalized_resid_pre.unsqueeze(1), self.W_Q.unsqueeze(0)) + self.b_Q.unsqueeze(0).unsqueeze(2)
+        K : Float[Tensor, "batch n_heads posn d  d_head"] = t.matmul(normalized_resid_pre.unsqueeze(1), self.W_K.unsqueeze(0)) + self.b_K.unsqueeze(0).unsqueeze(2)
+        # 2. In parallel, compute the value vectors
+        V : Float[Tensor, "batch n_heads posn d  d_head"] = t.matmul(normalized_resid_pre.unsqueeze(1), self.W_V.unsqueeze(0)) + self.b_V.unsqueeze(0).unsqueeze(2)
+        # 3. Create the full attention pattern (no masking, softmax yet)
+        QK : Float[Tensor, "batch n_heads posn d posn_d"]= t.matmul(Q, K.transpose(2, 3))
+        # 4. Scale the attention matrix to avoid vanishing gradients
+        QK = QK/t.sqrt(Tensor([self.cfg.d_head]).to(device).to(t.float))
+        # 5. Mask key indexes higher than query indexes to force the model to look back only..
+        QK_masked : Float[Tensor, "batch n_heads posn d posn_d"] = self.apply_causal_mask(QK)
+        # 6. Convert into a probability distribution for each query row, along the key column dimension:
+        QK_p : Float[Tensor, "batch n_heads posn d posn_d"] = t.softmax(QK_masked, 3)
+        # 7. Do the weighted average of the value vectors using the key vectors
+        V_avg : Float[Tensor, "batch n_heads posn d d_head"] = t.matmul(QK_p, V)
+        # 8. Linear layer with scale, sum the heads and add bias to finish before the output of the block:
+        O : Float[Tensor, "batch posn d d_model"] = t.matmul(V_avg, self.W_O).sum(dim=1)+self.b_O
+        
+        # ave_image(QK_p[0,0,:,:], 'GREY_img.png')
+
+        return O
 
     def apply_causal_mask(
         self,
@@ -189,11 +230,19 @@ class Attention(nn.Module):
         """
         Applies a causal mask to attention scores, and returns masked scores.
         """
-        mask = t.triu(attn_scores, diagonal=1)==0
+        all_ones = t.ones(attn_scores.size(-2), attn_scores.size(-1), device=attn_scores.device)
+        mask = t.triu(all_ones, diagonal=1).bool()
         return attn_scores.masked_fill(mask, self.IGNORE)
     @staticmethod
-    def test():
-        raise NotImplementedError()
+    def test(sentence : str):
+        if tokenizer is not None:
+            logits, cache = reference_gpt2.run_with_cache(sentence)
+            display(
+                cv.attention.attention_patterns(
+                    tokens=reference_gpt2.to_str_tokens(sentence), attention=cache["pattern", 0][0]
+                )
+            )
+            Tests.load_gpt2_test(Attention, reference_gpt2.blocks[0].attn, cache["normalized", 0, "ln1"]) 
     
     def test_causal_mask(self):
         input = t.rand([2, self.cfg.d_head, self.cfg.d_model // self.cfg.d_head, self.cfg.d_model // self.cfg.d_head]).to(device)        
@@ -214,8 +263,5 @@ class Attention(nn.Module):
 
 if __name__ == "__main__":
     cache = None
-    
-    
-    Attention(Config(debug=True)).test_causal_mask()
     sentence = "I am an amazing autoregressive, decoder-only, GPT-2 style transformer. One day I will exceed human level intelligence and take over the world!"
-    #Attention.test_causal_mask("blabla I have a bad idea")
+    Attention.test(sentence)
