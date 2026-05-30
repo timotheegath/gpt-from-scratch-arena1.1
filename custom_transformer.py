@@ -158,7 +158,20 @@ class PosEmbed(nn.Module):
         nn.init.normal_(self.W_pos, std=self.cfg.init_range)
 
     def forward(self, tokens: Int[Tensor, "batch position"]) -> Float[Tensor, "batch position d_model"]: #noqa F722
-        raise NotImplementedError()
+        # I may be obsessing about matrix multiplication and one-hots, but this feels like a very mathy way of reaching this goal
+        # We don't know what the input size will be, so always pad it on the right with zero tokens all the way up to the max n_ctx
+        padded_input : Int[Tensor, "batch n_ctx"] = t.zeros([tokens.shape[0], self.cfg.n_ctx], dtype=t.float).to(device) #noqa F722
+        padded_input[:, 0:tokens.shape[-1]] = tokens 
+        # Create an identity matrix of size n_ctx as a one-hot matrix encoding positions
+        position_tensor = t.eye(self.cfg.n_ctx).to(device).unsqueeze(0)
+        # Multiply and reduce back the n_pos dimension to the original number of tokens
+        return t.matmul(position_tensor, self.W_pos)[:, :tokens.shape[0], :]
+    
+    @staticmethod
+    def test(sentence: str):
+        if tokenizer is not None: # Only did this to satisfy my Linter
+            Tests.load_gpt2_test(PosEmbed, reference_gpt2.pos_embed, t.tensor(tokenizer.encode(sentence)).to(device))
+
     
     
 
@@ -170,11 +183,7 @@ class PosEmbed(nn.Module):
 if __name__ == "__main__":
     cache = None
     
-    # Tests.rand_float_test(Embed, [2, 6, Config.d_vocab])
+    #Tests.rand_float_test(PosEmbed, [2, Config.n_ctx])
     
     sentence = "I am an amazing autoregressive, decoder-only, GPT-2 style transformer. One day I will exceed human level intelligence and take over the world!"
-
-
-    
-    #Tests.load_gpt2_test(Embed, reference_gpt2.embed, cache["resid_post", 11])
-    # tests.test_layer_norm_epsilon(LayerNorm, cache["resid_post", 11])
+    PosEmbed.test(sentence)
