@@ -434,7 +434,7 @@ if __name__ == "__main__":
     sentence = "When will the earth stop moving ? Or when will the pigs fly ? The answer does not lie in the  "
     demo_gpt2 = DemoTransformer(Config(debug=False)).to(device)
     demo_gpt2.load_state_dict(reference_gpt2.state_dict(), strict=False)
-    tokens = Tensor(tokenizer.encode(sentence)).to(t.int).to(device)
+    tokens = Tensor(tokenizer.encode(sentence)).to(t.int).to(device).unsqueeze(0)
     demo_logits = demo_gpt2(tokens)
     pred_log_probs = get_log_probs(demo_logits, tokens)
     print(f"Avg cross entropy loss: {-pred_log_probs.mean():.4f}")
