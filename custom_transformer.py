@@ -24,7 +24,7 @@ from transformer_lens import HookedTransformer
 import circuitsvis as cv
 from IPython.display import display
 
-# from transformer_lens.utils import gelu_new, tokenize_and_concatenate
+from transformer_lens.utils import gelu_new
 # from transformers import GPT2TokenizerFast
 
 device = t.device(
@@ -253,7 +253,31 @@ class Attention(nn.Module):
         print("Output shape:", output.shape, "\n")
         print(output[0,0,:,:])
 
+class MLP(nn.Module):
+    def __init__(self, cfg: Config):
+        super().__init__()
+        self.cfg = cfg
+        self.W_in = nn.Parameter(t.empty((cfg.d_model, cfg.d_mlp)))
+        self.W_out = nn.Parameter(t.empty((cfg.d_mlp, cfg.d_model)))
+        self.b_in = nn.Parameter(t.zeros((cfg.d_mlp)))
+        self.b_out = nn.Parameter(t.zeros((cfg.d_model)))
+        nn.init.normal_(self.W_in, std=self.cfg.init_range)
+        nn.init.normal_(self.W_out, std=self.cfg.init_range)
+
+    def forward(self, normalized_resid_mid: Float[Tensor, "batch posn d_model"]) -> Float[Tensor, "batch posn d_model"]:
+        
+        hidden_space =  gelu_new(t.matmul(normalized_resid_mid, self.W_in.unsqueeze(0)) + self.b_in)
+        out = t.matmul(hidden_space, self.W_out.unsqueeze(0)) + self.b_out
+
+        return out
+        
     
+    @staticmethod
+    def test(sentence : str):
+        if tokenizer is not None:
+            logits, cache = reference_gpt2.run_with_cache(sentence)
+            Tests.load_gpt2_test(MLP, reference_gpt2.blocks[0].mlp, cache["normalized", 0, "ln2"])
+
     
 
 
@@ -263,5 +287,6 @@ class Attention(nn.Module):
 
 if __name__ == "__main__":
     cache = None
+
     sentence = "I am an amazing autoregressive, decoder-only, GPT-2 style transformer. One day I will exceed human level intelligence and take over the world!"
-    Attention.test(sentence)
+    MLP.test(sentence)
