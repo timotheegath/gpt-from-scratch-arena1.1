@@ -1,5 +1,5 @@
 from dataclasses import dataclass  # noqa: I001
-from typing import cast, TYPE_CHECKING
+from typing import cast
 
 import torch as t
 import torch.nn as nn
@@ -10,23 +10,21 @@ from jaxtyping import Float, Int, jaxtyped
 from tqdm import tqdm
 from transformer_lens import HookedTransformer
 from transformer_lens.utils import gelu_new  # type: ignore
+from transformers import PreTrainedTokenizerBase
 # from training import get_log_probs
-
-if TYPE_CHECKING:
-    from transformers import PreTrainedTokenizerBase
 
 # ruff: noqa: F722
 
 device = t.device(
     "mps" if t.backends.mps.is_available() else "cuda" if t.cuda.is_available() else "cpu"
 )
-reference_gpt2 = HookedTransformer.from_pretrained(
+""" reference_gpt2 = HookedTransformer.from_pretrained(
     "gpt2-small",
     fold_ln=False,
     center_unembed=False,
     center_writing_weights=False,  # you'll learn about these arguments later!
 )
-tokenizer = reference_gpt2.tokenizer
+tokenizer = reference_gpt2.tokenizer """
 
 
 @dataclass
@@ -138,7 +136,9 @@ class LayerNorm(nn.Module):
         return scaled_residual
 
     @staticmethod
-    def test(sentence: str) -> None:
+    def test(
+        sentence: str, tokenizer: PreTrainedTokenizerBase, reference_gpt2: HookedTransformer
+    ) -> None:
         if tokenizer is not None:  # Only did this to satisfy my Linter
             logits, cache = reference_gpt2.run_with_cache(sentence)
             Tests.load_gpt2_test(LayerNorm, reference_gpt2.ln_final, cache["resid_post", 11])
@@ -165,7 +165,9 @@ class Embed(nn.Module):
         return embeddings
 
     @staticmethod
-    def test(sentence: str) -> None:
+    def test(
+        sentence: str, tokenizer: PreTrainedTokenizerBase, reference_gpt2: HookedTransformer
+    ) -> None:
         if tokenizer is not None:  # Only did this to satisfy my Linter
             Tests.load_gpt2_test(
                 Embed, reference_gpt2.embed, t.tensor(tokenizer.encode(sentence)).to(device)
@@ -196,7 +198,9 @@ class PosEmbed(nn.Module):
         return pos_embed
 
     @staticmethod
-    def test(sentence: str) -> None:
+    def test(
+        sentence: str, tokenizer: PreTrainedTokenizerBase, reference_gpt2: HookedTransformer
+    ) -> None:
         if tokenizer is not None:  # Only did this to satisfy my Linter
             Tests.load_gpt2_test(
                 PosEmbed, reference_gpt2.pos_embed, t.tensor(tokenizer.encode(sentence)).to(device)
@@ -271,7 +275,9 @@ class Attention(nn.Module):
         return attn_scores.masked_fill(mask, self.IGNORE)
 
     @staticmethod
-    def test(sentence: str) -> None:
+    def test(
+        sentence: str, tokenizer: PreTrainedTokenizerBase, reference_gpt2: HookedTransformer
+    ) -> None:
         if tokenizer is not None:
             logits, cache = reference_gpt2.run_with_cache(sentence)
             Tests.load_gpt2_test(
@@ -318,7 +324,9 @@ class MLP(nn.Module):
         return out
 
     @staticmethod
-    def test(sentence: str) -> None:
+    def test(
+        sentence: str, tokenizer: PreTrainedTokenizerBase, reference_gpt2: HookedTransformer
+    ) -> None:
         if tokenizer is not None:
             logits, cache = reference_gpt2.run_with_cache(sentence)
             Tests.load_gpt2_test(
@@ -354,7 +362,9 @@ class TransformerBlock(nn.Module):
         return residual_post_mlp
 
     @staticmethod
-    def test(sentence: str) -> None:
+    def test(
+        sentence: str, tokenizer: PreTrainedTokenizerBase, reference_gpt2: HookedTransformer
+    ) -> None:
         if tokenizer is not None:
             logits, cache = reference_gpt2.run_with_cache(sentence)
             Tests.load_gpt2_test(TransformerBlock, reference_gpt2.blocks[0], cache["resid_pre", 0])
@@ -379,7 +389,9 @@ class Unembed(nn.Module):
         return t.matmul(normalized_resid_final, self.W_U) + self.b_U
 
     @staticmethod
-    def test(sentence: str) -> None:
+    def test(
+        sentence: str, tokenizer: PreTrainedTokenizerBase, reference_gpt2: HookedTransformer
+    ) -> None:
         if tokenizer is not None:
             logits, cache = reference_gpt2.run_with_cache(sentence)
             Tests.load_gpt2_test(Unembed, reference_gpt2.unembed, cache["ln_final.hook_normalized"])
@@ -445,8 +457,14 @@ class DemoTransformer(nn.Module):
             out_sentence += decoded
         return out_sentence
 
+    def load_pretrained_weights_from_reference(self) -> None:
+        self.load_state_dict(self.reference.state_dict(), strict=False)
+        return
+
     @staticmethod
-    def test(sentence: str) -> None:
+    def test(
+        sentence: str, tokenizer: PreTrainedTokenizerBase, reference_gpt2: HookedTransformer
+    ) -> None:
         if tokenizer is not None:
             tokens = Tensor(tokenizer.encode(sentence)).to(device).to(t.int)
             Tests.load_gpt2_test(DemoTransformer, reference_gpt2, tokens)
@@ -458,11 +476,9 @@ class DemoTransformer(nn.Module):
 
 if __name__ == "__main__":
     cache = None
-    if tokenizer is None:
-        raise TypeError
     sentence = "When will the earth stop moving ? Or when will the pigs fly ?"
     demo_gpt2 = DemoTransformer(Config(debug=False)).to(device)
-    demo_gpt2.load_state_dict(reference_gpt2.state_dict(), strict=False)
+    demo_gpt2.load_pretrained_weights_from_reference()
     # tokens = Tensor(tokenizer.encode(sentence)).to(t.int).to(device).unsqueeze(0)
     # demo_logits = demo_gpt2(tokens)
     # pred_log_probs = get_log_probs(demo_logits, tokens)
