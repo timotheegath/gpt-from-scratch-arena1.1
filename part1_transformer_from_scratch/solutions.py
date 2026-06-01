@@ -4,32 +4,34 @@ import os
 
 os.environ["ACCELERATE_DISABLE_RICH"] = "1"
 # os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+import math
 import sys
-import einops
+import webbrowser
+from collections import defaultdict
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+import datasets
+import einops
+import numpy as np
+import torch as t
+import torch.nn as nn
+from jaxtyping import Float, Int
+from rich import print as rprint
+from rich.table import Table
+from torch import Tensor
+from torch.utils.data import DataLoader
+from tqdm.notebook import tqdm
 from transformer_lens import HookedTransformer
 from transformer_lens.utilities.activation_functions import gelu_fast
 from transformer_lens.utilities.tokenize_utils import tokenize_and_concatenate
-import torch as t
-from torch import Tensor
-import torch.nn as nn
-import numpy as np
-import math
-from tqdm.notebook import tqdm
-from typing import Tuple, List, Optional, Dict
-from jaxtyping import Float, Int
 from transformers.models.gpt2.tokenization_gpt2 import GPT2Tokenizer as GPT2TokenizerFast
-from collections import defaultdict
-from rich.table import Table
-from rich import print as rprint
-import datasets
-from torch.utils.data import DataLoader
 
 # import pytorch_lightning as pl
 # from pytorch_lightning.loggers import WandbLogger
 import wandb
-from pathlib import Path
-import webbrowser
+
 # import part1_transformer_from_scratch.solutions as solutions
 
 device = t.device("cuda" if t.cuda.is_available() else "cpu")
@@ -292,7 +294,6 @@ if MAIN:
 
 import circuitsvis as cv
 from IPython.display import display
-
 
 if MAIN:
     html = cv.attention.attention_patterns(

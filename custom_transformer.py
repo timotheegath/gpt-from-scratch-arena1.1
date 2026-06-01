@@ -550,7 +550,7 @@ class TransformerSampler:
         assert input_ids.ndim == 1, "input_ids should be a 1D sequence of token ids"
         assert temperature >= 0, "Temperature should be non-negative"
         assert 0 <= top_p <= 1.0, "Top-p must be a probability"
-        assert top_k >=0, "Top-k must be non-negative"
+        assert top_k >= 0, "Top-k must be non-negative"
         assert not (top_p != 0 and top_k != 0), "At most one of top-p and top-k supported"
 
         # Set random seeds for reproducibility
