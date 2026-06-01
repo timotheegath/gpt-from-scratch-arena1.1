@@ -51,7 +51,7 @@ def load_dataset(
         max_length=context_size,
         column_name="text",
         add_bos_token=True,
-        num_proc=4,
+        num_proc=12,
     )
     assert isinstance(tokenized_dataset, datasets.Dataset)
     dataset_dict = tokenized_dataset.train_test_split(test_size=1000)
@@ -70,4 +70,4 @@ def load_dataset(
         pin_memory=True,
     )
 
-    return train_loader, test_loader
+    return train_loader, test_loader  # Dataset of shape [batch, sequence_length (max_ctx_size)]

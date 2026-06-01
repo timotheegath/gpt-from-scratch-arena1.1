@@ -14,4 +14,7 @@ model_cfg = Config(
 model = DemoTransformer(model_cfg)
 training_params = TransformerTrainingArgs()
 assert model.reference.tokenizer is not None
-load_dataset(model.reference.tokenizer, model.cfg.n_ctx, training_params)
+train_loader, test_loader = load_dataset(
+    model.reference.tokenizer, model.cfg.n_ctx, training_params
+)
+print()
