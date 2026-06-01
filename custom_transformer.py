@@ -1,28 +1,14 @@
 
-# import os
-# import sys
-# from collections import defaultdict
 from dataclasses import dataclass
-# from pathlib import Path
 from typing import Tuple, List
-from beartype import beartype as typechecker    
-from torchvision.utils import save_image
-
-# import datasets
-#import einops
-# import numpy as np
+from beartype import beartype as typechecker
 import torch as t
 import torch.nn as nn
-# import wandb
 from jaxtyping import Float, Int, jaxtyped
-# from rich import print as rprint
-# from rich.table import Table
 from torch import Tensor
-# from torch.utils.data import DataLoader
-# from tqdm.notebook import tqdm
 from transformer_lens import HookedTransformer
-import circuitsvis as cv
-from IPython.display import display
+
+from visualizers import display_logits
 
 from transformer_lens.utils import gelu_new
 # from transformers import GPT2TokenizerFast
@@ -107,8 +93,6 @@ class Tests:
         except TypeError:
             reference_output = gpt2_layer(input, input, input)
         print("Reference output shape:", reference_output.shape, "\n")
-        save_image(reference_output[0,:,:], 'reference_output.png')
-        save_image(output[0,:,:], 'my_output.png')
         comparison = t.isclose(output, reference_output, atol=1e-4, rtol=1e-3)
         print(f"{comparison.sum() / comparison.numel():.2%} of the values are correct\n")
         assert 1 - (comparison.sum() / comparison.numel()) < 1e-5, "More than 0.01% of the values are incorrect"
@@ -377,9 +361,11 @@ class DemoTransformer(nn.Module):
 
 if __name__ == "__main__":
     cache = None
-
-    sentence = "I am an amazing autoregressive, decoder-only, GPT-2 style transformer. One day I will exceed human level intelligence and take over the world!"
+    if tokenizer is None:
+        raise TypeError
+    sentence = "When will the earth stop moving ? Or when will the pigs fly ? The answer does not lie in the  "
     demo_gpt2 = DemoTransformer(Config(debug=False)).to(device)
     demo_gpt2.load_state_dict(reference_gpt2.state_dict(), strict=False)
-    if tokenizer is not None:
-        demo_logits = demo_gpt2(tokenizer.encode(sentence))
+    tokens = tokenizer.encode(sentence)
+    demo_logits = demo_gpt2(tokens)
+    display_logits(tokenizer, tokens, demo_logits)
