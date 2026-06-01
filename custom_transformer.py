@@ -351,7 +351,10 @@ class DemoTransformer(nn.Module):
         self.ln_final = LayerNorm(cfg)
         self.unembed = Unembed(cfg)
 
-    def forward(self, tokens: Int[Tensor, "batch position"]) -> Float[Tensor, "batch position d_vocab"]:
+    def forward(self, tokens: Int[Tensor, "batch position"] | list) -> Float[Tensor, "batch position d_vocab"]:
+        # Ensure the tokens are already a tensor. if not, convert:
+        if type(tokens) is not Int[Tensor, '...']:
+            tokens = Tensor(tokens).to(t.int).to(device)
         # Embed meaning and position
         x_embed = self.embed(tokens)
         x_pos = self.pos_embed(tokens)
@@ -376,4 +379,7 @@ if __name__ == "__main__":
     cache = None
 
     sentence = "I am an amazing autoregressive, decoder-only, GPT-2 style transformer. One day I will exceed human level intelligence and take over the world!"
-    DemoTransformer.test(sentence)
+    demo_gpt2 = DemoTransformer(Config(debug=False)).to(device)
+    demo_gpt2.load_state_dict(reference_gpt2.state_dict(), strict=False)
+    if tokenizer is not None:
+        demo_logits = demo_gpt2(tokenizer.encode(sentence))
