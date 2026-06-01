@@ -3,14 +3,14 @@ from typing import cast, TYPE_CHECKING
 
 import torch as t
 import torch.nn as nn
-import math
 
 from torch import Tensor
 from beartype import beartype as typechecker
 from jaxtyping import Float, Int, jaxtyped
+from tqdm import tqdm
 from transformer_lens import HookedTransformer
 from transformer_lens.utils import gelu_new  # type: ignore
-from training import get_log_probs
+# from training import get_log_probs
 
 if TYPE_CHECKING:
     from transformers import PreTrainedTokenizerBase
@@ -422,8 +422,19 @@ class DemoTransformer(nn.Module):
         return logits
 
     def complete_text(self, sentence: str, length: int = 100) -> str:
-
-        return ""
+        out_sentence = sentence
+        for _ in tqdm(range(length)):
+            test_tokens = (
+                Tensor(self.tokenizer.encode(out_sentence)).to(t.int).to(device).unsqueeze(0)
+            )
+            demo_logits = self(test_tokens)
+            next_token = demo_logits[-1, -1].argmax()
+            decoded = self.tokenizer.decode(next_token)
+            # Added as the decoder seems to either return a single str or a list[str]
+            if isinstance(decoded, list):
+                decoded = decoded[0] if decoded else ""
+            out_sentence += decoded
+        return out_sentence
 
     @staticmethod
     def test(sentence: str) -> None:
@@ -440,12 +451,11 @@ if __name__ == "__main__":
     cache = None
     if tokenizer is None:
         raise TypeError
-    sentence = "When will the earth stop moving ? Or when will the pigs fly ? The answer does not lie in the  "
+    sentence = "When will the earth stop moving ? Or when will the pigs fly ?"
     demo_gpt2 = DemoTransformer(Config(debug=False)).to(device)
     demo_gpt2.load_state_dict(reference_gpt2.state_dict(), strict=False)
-    tokens = Tensor(tokenizer.encode(sentence)).to(t.int).to(device).unsqueeze(0)
-    demo_logits = demo_gpt2(tokens)
-    pred_log_probs = get_log_probs(demo_logits, tokens)
-    print(f"Avg cross entropy loss: {-pred_log_probs.mean():.4f}")
-    print(f"Avg cross entropy loss for uniform distribution: {math.log(demo_gpt2.cfg.d_vocab):4f}")
-    print(f"Avg probability assigned to correct token: {pred_log_probs.exp().mean():4f}")
+    # tokens = Tensor(tokenizer.encode(sentence)).to(t.int).to(device).unsqueeze(0)
+    # demo_logits = demo_gpt2(tokens)
+    # pred_log_probs = get_log_probs(demo_logits, tokens)
+    full_sentence = demo_gpt2.complete_text(sentence, 100)
+    print(full_sentence)
