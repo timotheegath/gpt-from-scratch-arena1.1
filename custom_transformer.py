@@ -486,9 +486,9 @@ class TransformerSampler:
             t.manual_seed(seed)
             np.random.seed(seed)
         input_tokens = Tensor(self.tokenizer.encode(prompt)).to(t.int).to(device).unsqueeze(0)
-        logits:  Float[Tensor, "batch position d_vocab"] = self.model.forward(input_tokens)
-        print(logits.shape)
-        
+        logits:  Float[Tensor, "batch position d_vocab"] = self.model.forward(input_tokens) # For sampling, shouldn't we just keep the last position ? I will just keep the last position for now:
+        last_logits: Float[Tensor, "batch d_vocab"] = logits[:, -1, :]
+                
         return ""
 
 
