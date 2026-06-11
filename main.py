@@ -31,7 +31,7 @@ tests.test_apply_frequency_penalty(TransformerSampler.apply_frequency_penalty)
 
 bieber_prompt = "And I was like Baby, baby, baby, oh Like, Baby, baby, baby, no Like, Baby, baby, baby, oh I thought you'd always be mine, mine"
 input_ids = Tensor(model.tokenizer.encode(bieber_prompt, return_tensors="pt")).to(device)
-logits = t.ones(model.tokenizer.vocab_size)
+logits = t.ones(model.tokenizer.vocab_size).to(device)
 penalized_logits = TransformerSampler.apply_frequency_penalty(input_ids.squeeze(), logits, 2.0)
 
 assert penalized_logits[5156].item() == -11, "Expected 6 occurrences of ' baby' with leading space, 1-2*6=-11"

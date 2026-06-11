@@ -486,8 +486,10 @@ class TransformerSampler:
         target_length = logits.shape[-1]
         padded = t.zeros(target_length).to(device)
         padded[:len(frequency)] = frequency
+        freq_penalty = Tensor([freq_penalty]).to(device)
+        logits_post_penalty = logits - padded*freq_penalty
 
-        return logits - padded*freq_penalty
+        return logits_post_penalty
 
     @staticmethod
     def sample_basic(logits: Float[Tensor, "d_vocab"]) -> int:
