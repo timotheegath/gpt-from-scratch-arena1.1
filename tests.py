@@ -8,14 +8,14 @@ if str(exercises_dir) not in sys.path:
     sys.path.append(str(exercises_dir))
 
 
-
 # ! CELL TYPE: code
 # ! FILTERS: []
 # ! TAGS: []
 
+
 def rand_float_test(cls, shape):
     from part1_transformer_from_scratch.solutions import Config, device
-    
+
     cfg = Config(debug=True)
     layer = cls(cfg).to(device)
     random_input = t.randn(shape).to(device)
@@ -28,6 +28,7 @@ def rand_float_test(cls, shape):
 
 def rand_int_test(cls, shape):
     from part1_transformer_from_scratch.solutions import Config, device
+
     cfg = Config(debug=True)
     layer = cls(cfg).to(device)
     random_input = t.randint(100, 1000, shape).to(device)
@@ -40,13 +41,16 @@ def rand_int_test(cls, shape):
 
 def load_gpt2_test(cls, gpt2_layer, input):
     from part1_transformer_from_scratch.solutions import Config, device
+
     cfg = Config(debug=True)
     layer = cls(cfg).to(device)
     layer.load_state_dict(gpt2_layer.state_dict(), strict=False)
     print("Input shape:", input.shape)
     orig_input = input.clone()
     output = layer(orig_input)
-    assert t.allclose(input, orig_input), "Input has been modified, make sure operations are not done in place"
+    assert t.allclose(input, orig_input), (
+        "Input has been modified, make sure operations are not done in place"
+    )
     if isinstance(output, tuple):
         output = output[0]
     print("Output shape:", output.shape)
@@ -55,14 +59,19 @@ def load_gpt2_test(cls, gpt2_layer, input):
     except:
         reference_output = gpt2_layer(input, input, input)
     print("Reference output shape:", reference_output.shape, "\n")
-    assert output.shape == reference_output.shape, f"Expected shape: {reference_output.shape} Actual shape: {output.shape}"
+    assert output.shape == reference_output.shape, (
+        f"Expected shape: {reference_output.shape} Actual shape: {output.shape}"
+    )
     comparison = t.isclose(output, reference_output, atol=1e-4, rtol=1e-3)
     print(f"{comparison.sum() / comparison.numel():.2%} of the values are correct\n")
-    assert 1 - (comparison.sum() / comparison.numel()) < 1e-5, "More than 0.01% of the values are incorrect"
+    assert 1 - (comparison.sum() / comparison.numel()) < 1e-5, (
+        "More than 0.01% of the values are incorrect"
+    )
 
 
 def test_layer_norm_epsilon(layer_norm, cache):
     import part1_transformer_from_scratch.solutions as solutions
+
     cfg = solutions.Config(layer_norm_eps=0.1)
 
     # Use a large epsilon (0.1, vs the ~1e-5 default) so that `sqrt(var) + eps` and
@@ -92,6 +101,7 @@ def test_layer_norm_epsilon(layer_norm, cache):
         msg="LayerNorm: did you apply the learned scale and bias (`* w + b`) after normalizing?",
     )
     print("All tests in `test_layer_norm_epsilon` passed!")
+
 
 def test_causal_mask(apply_causal_mask):
     import part1_transformer_from_scratch.solutions as solutions
@@ -320,7 +330,9 @@ def test_sample_basic(sample_basic):
     for _ in range(N):
         tok = sample_basic(logits)
         assert isinstance(tok, int), f"sample_basic should return a python int, got {type(tok)}"
-        assert 0 <= tok < d_vocab, f"sample_basic returned token {tok} outside the vocab range [0, {d_vocab})"
+        assert 0 <= tok < d_vocab, (
+            f"sample_basic returned token {tok} outside the vocab range [0, {d_vocab})"
+        )
         counts[tok] += 1
 
     observed = counts / N
@@ -431,7 +443,7 @@ def test_sample_top_p(sample_top_p):
         counts[tok] += 1
 
     observed = (counts / N)[:3]
-    expected = (probs[:3] / probs[:3].sum())  # renormalised over the kept tokens
+    expected = probs[:3] / probs[:3].sum()  # renormalised over the kept tokens
     t.testing.assert_close(
         observed,
         expected,

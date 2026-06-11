@@ -27,7 +27,7 @@ device = t.device(
 ) """
 model = DemoTransformer(Config()).to(device)
 model.load_pretrained_weights_from_reference()
-sampler = TransformerSampler(model, model.tokenizer) # type: ignore
+sampler = TransformerSampler(model, model.tokenizer)  # type: ignore
 
 N_RUNS = 2
 your_prompt = "Jingle bells, jingle bells, jingle all the way"
@@ -40,9 +40,8 @@ cases = [
     ("Too cold!", dict(temperature=0.01)),
 ]
 
-table = Table(columns = ["Name", "Kwargs", "Output"])
+table = Table(columns=["Name", "Kwargs", "Output"])
 with wandb.init(project="temperature-penalty-test") as run:
-
     for name, kwargs in cases:
         for i in range(N_RUNS):
             output = sampler.sample(your_prompt, max_tokens_generated=24)

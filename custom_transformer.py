@@ -43,6 +43,7 @@ class Config:
     n_heads: int = 12
     n_layers: int = 12
 
+
 """Put the code for your custom transformer layers here. You can use the tests above to check if your implementation is correct."""
 
 
@@ -127,7 +128,9 @@ class PosEmbed(nn.Module):
     ) -> None:
         if tokenizer is not None:  # Only did this to satisfy my Linter
             tests.load_gpt2_test(
-                PosEmbed, reference_gpt2.pos_embed, t.tensor(tokenizer.encode(sentence)).unsqueeze(0).to(device)
+                PosEmbed,
+                reference_gpt2.pos_embed,
+                t.tensor(tokenizer.encode(sentence)).unsqueeze(0).to(device),
             )
 
     @staticmethod
@@ -309,7 +312,7 @@ class Unembed(nn.Module):
     def forward(
         self, normalized_resid_final: Float[Tensor, "batch position d_model"]
     ) -> Float[Tensor, "batch position d_vocab"]:
-        out= t.matmul(normalized_resid_final, self.W_U) + self.b_U
+        out = t.matmul(normalized_resid_final, self.W_U) + self.b_U
         return out
 
     @staticmethod
@@ -395,6 +398,7 @@ class DemoTransformer(nn.Module):
     def test_with_random() -> None:
         tests.rand_int_test(DemoTransformer, [2, 4])
 
+
 class TransformerSampler:
     def __init__(self, model: DemoTransformer, tokenizer: GPT2TokenizerFast):
         self.model = model
@@ -407,7 +411,7 @@ class TransformerSampler:
         Returns a string of autoregressively generated text, starting from the prompt.
 
         Sampling terminates at max_tokens_generated, or when the model generates an end-of-sequence token. kwargs are
-        passed to sample_next_token, to give detailed instructions on how new tokens are chosen. 
+        passed to sample_next_token, to give detailed instructions on how new tokens are chosen.
         Pass `seed` to make generation reproducible.
         """
         sequence: list[str] = []
@@ -416,17 +420,24 @@ class TransformerSampler:
         if seed is not None:
             t.manual_seed(seed)
             np.random.seed(seed)
-        while len(sequence) <= max_tokens_generated and (len(sequence) == 0 or sequence[-1] != self.tokenizer.eos_token_id):
+        while len(sequence) <= max_tokens_generated and (
+            len(sequence) == 0 or sequence[-1] != self.tokenizer.eos_token_id
+        ):
             prompt_with_new_seq = prompt + "".join(sequence)
-            input_tokens = Tensor(self.tokenizer.encode(prompt_with_new_seq)).to(t.int).to(device).unsqueeze(0)
-            logits:  Float[Tensor, "batch position d_vocab"] = self.model.forward(input_tokens[:, -self.cfg.n_ctx :]) # For sampling, shouldn't we just keep the last position ? I will just keep the last position for now:
+            input_tokens = (
+                Tensor(self.tokenizer.encode(prompt_with_new_seq)).to(t.int).to(device).unsqueeze(0)
+            )
+            logits: Float[Tensor, "batch position d_vocab"] = self.model.forward(
+                input_tokens[:, -self.cfg.n_ctx :]
+            )  # For sampling, shouldn't we just keep the last position ? I will just keep the last position for now:
             last_logits: Float[Tensor, "batch d_vocab"] = logits[:, -1, :]
             next_token = self.sample_next_token(input_tokens.squeeze(0), last_logits.squeeze(0))
-            sequence.append(str(self.tokenizer.decode(next_token))) # Add the new word to the sequence
+            sequence.append(
+                str(self.tokenizer.decode(next_token))
+            )  # Add the new word to the sequence
             if verbose:
                 print(prompt + "".join(sequence), end="\r")
         return prompt + "".join(sequence)
-
 
     @staticmethod
     def sample_next_token(
@@ -450,7 +461,9 @@ class TransformerSampler:
         elif temperature != 1.0:
             logits = TransformerSampler.apply_temperature(logits, temperature)
         if frequency_penalty != 0.0:
-            logits = TransformerSampler.apply_frequency_penalty(input_ids, logits, frequency_penalty)
+            logits = TransformerSampler.apply_frequency_penalty(
+                input_ids, logits, frequency_penalty
+            )
         if top_k > 0:
             return TransformerSampler.sample_top_k(logits, top_k)
         if top_p > 0.0:
@@ -465,14 +478,16 @@ class TransformerSampler:
         raise NotImplementedError()
 
     @staticmethod
-    def apply_temperature(logits: Float[Tensor, "d_vocab"], temperature: float) -> Float[Tensor, "d_vocab"]:
+    def apply_temperature(
+        logits: Float[Tensor, "d_vocab"], temperature: float
+    ) -> Float[Tensor, "d_vocab"]:
         """
         Applies temperature scaling to the logits.
         """
-        if temperature == 0: # then it's just greedy
+        if temperature == 0:  # then it's just greedy
             token_winner = t.argmax(logits, -1)
             return t.nn.functional.one_hot(token_winner, num_classes=logits.shape[-1])
-        return logits/temperature
+        return logits / temperature
 
     @staticmethod
     def apply_frequency_penalty(
@@ -485,8 +500,8 @@ class TransformerSampler:
         # Extend the tensor to be the vocab size, even if there are no occurences at those higher token indices.
         target_length = logits.shape[-1]
         padded = t.zeros(target_length).to(device)
-        padded[:len(frequency)] = frequency
-        logits_post_penalty = logits - padded*freq_penalty
+        padded[: len(frequency)] = frequency
+        logits_post_penalty = logits - padded * freq_penalty
 
         return logits_post_penalty
 
@@ -504,10 +519,15 @@ class TransformerSampler:
         """
         Samples from the top k most likely tokens.
         """
-        raise NotImplementedError()
+        topks = t.topk(logits, k, dim=-1)  # named tuple with values [ ] and indices [ ]
+        top_logits = t.zeros_like(logits).to(device)
+        top_logits[topks.indices] = topks.indices
+        return int(t.distributions.Categorical(top_logits).sample())
 
     @staticmethod
-    def sample_top_p(logits: Float[Tensor, "d_vocab"], top_p: float, min_tokens_to_keep: int = 1) -> int:
+    def sample_top_p(
+        logits: Float[Tensor, "d_vocab"], top_p: float, min_tokens_to_keep: int = 1
+    ) -> int:
         """
         Samples from the most likely tokens which make up at least p cumulative probability.
         """
@@ -528,6 +548,7 @@ class TransformerSampler:
         we've generated `num_returns_sequences` terminating sequences.
         """
         raise NotImplementedError()
+
     def test_greedy(self) -> None:
         expected = "Jingle bells, jingle bells, jingle all the way up to the top of the mountain."
         prompt = "Jingle bells, jingle bells, jingle all the way"
@@ -536,4 +557,3 @@ class TransformerSampler:
         print(f"Expected: {expected!r}\nActual:   {output!r}\n")
         assert output == expected
         print("tests passed!")
-
