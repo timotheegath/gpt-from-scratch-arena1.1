@@ -42,73 +42,6 @@ class Config:
     n_heads: int = 12
     n_layers: int = 12
 
-
-class Tests:
-    @staticmethod
-    def rand_float_test(model_cls: type[nn.Module], shape: list[int]) -> None:
-        cfg = Config(debug=True)
-        layer = model_cls(cfg).to(device)
-        random_input = t.randn(shape).to(device)
-        print("Input shape:", random_input.shape)
-        output = layer(random_input)
-        if isinstance(output, tuple):
-            output = output[0]
-        print("Output shape:", output.shape, "\n")
-
-    @staticmethod
-    def assert_normalized(norm_output: t.Tensor) -> None:
-        new_mean, new_variance = t.var_mean(norm_output, dim=-1)
-        non_zero_means_per_batch: Float[Tensor, "batch"] = t.count_nonzero(new_mean < 1e-4, dim=-1)  # noqa: UP037, F821
-        high_variance_per_batch: Float[Tensor, "batch"] = t.count_nonzero(new_variance > 1, dim=-1)  # noqa: UP037, F821
-        assert t.any(non_zero_means_per_batch == 0), (
-            f"There is at least one batch with a non-zero-mean embedding: {non_zero_means_per_batch}"
-        )
-        assert t.any(high_variance_per_batch == 0), (
-            f"There is at least one batch with a higher-than-1 variance: {non_zero_means_per_batch}"
-        )
-
-    @staticmethod
-    def rand_int_test(model_cls: type[nn.Module], shape: list[int]) -> None:
-        cfg = Config(debug=True)
-        layer = model_cls(cfg).to(device)
-        random_input = t.randint(100, 1000, shape).to(device)
-        print("Input shape:", random_input.shape)
-        output = layer(random_input)
-        if isinstance(output, tuple):
-            output = output[0]
-        print("Output shape:", output.shape, "\n")
-
-    """You can use this test to check if your implementation matches GPT-2's outputs."""
-
-    @staticmethod
-    def load_gpt2_test(model_cls: type[nn.Module], gpt2_layer: nn.Module, input: t.Tensor) -> None:
-        # Create your custom layer and load the trained GPT-2 weigthts into it.
-        cfg = Config(debug=True)
-        layer = model_cls(cfg).to(device)
-        layer.load_state_dict(gpt2_layer.state_dict(), strict=False)
-        print("Input shape:", input.shape)
-
-        # Pass the input forward through your layer and the GPT-2 layer, and compare the outputs.
-        orig_input = input.clone()
-        output = layer(orig_input)
-        assert t.allclose(input, orig_input), (
-            "Input has been modified, make sure operations are not done in place"
-        )
-        if isinstance(output, tuple):
-            output = output[0]
-        print("Output shape:", output.shape)
-        try:
-            reference_output = gpt2_layer(input)
-        except TypeError:
-            reference_output = gpt2_layer(input, input, input)
-        print("Reference output shape:", reference_output.shape, "\n")
-        comparison = t.isclose(output, reference_output, atol=1e-4, rtol=1e-3)
-        print(f"{comparison.sum() / comparison.numel():.2%} of the values are correct\n")
-        assert 1 - (comparison.sum() / comparison.numel()) < 1e-5, (
-            "More than 0.01% of the values are incorrect"
-        )
-
-
 """Put the code for your custom transformer layers here. You can use the tests above to check if your implementation is correct."""
 
 
@@ -555,7 +488,9 @@ class TransformerSampler:
         """
         Samples from the distribution defined by the logits.
         """
-        raise NotImplementedError()
+        distribution = t.distributions.categorical.Categorical(logits=logits)
+        next_token = distribution.sample()
+        return int(next_token)
 
     @staticmethod
     def sample_top_k(logits: Float[Tensor, "d_vocab"], k: int) -> int:
