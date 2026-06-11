@@ -27,18 +27,15 @@ model = DemoTransformer(Config()).to(device)
 model.load_pretrained_weights_from_reference()
 sampler = TransformerSampler(model, model.tokenizer) # type: ignore
 
-tests.test_apply_temperature(TransformerSampler.apply_temperature)
+tests.test_apply_frequency_penalty(TransformerSampler.apply_frequency_penalty)
 
-logits = t.tensor([1, 2]).log()
+bieber_prompt = "And I was like Baby, baby, baby, oh Like, Baby, baby, baby, no Like, Baby, baby, baby, oh I thought you'd always be mine, mine"
+input_ids = Tensor(model.tokenizer.encode(bieber_prompt, return_tensors="pt")).to(device)
+logits = t.ones(model.tokenizer.vocab_size)
+penalized_logits = TransformerSampler.apply_frequency_penalty(input_ids.squeeze(), logits, 2.0)
 
-cold_logits = TransformerSampler.apply_temperature(logits, temperature=0.001)
-print('A low temperature "sharpens" or "peaks" the distribution: ', cold_logits)
-t.testing.assert_close(cold_logits, 1000.0 * logits)
-
-hot_logits = TransformerSampler.apply_temperature(logits, temperature=1000.0)
-print("A high temperature flattens the distribution: ", hot_logits)
-t.testing.assert_close(hot_logits, 0.001 * logits)
+assert penalized_logits[5156].item() == -11, "Expected 6 occurrences of ' baby' with leading space, 1-2*6=-11"
+assert penalized_logits[14801].item() == -5, "Expected 3 occurrences of ' Baby' with leading space, 1-2*3=-5"
 
 print("Tests passed!")
-
 

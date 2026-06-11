@@ -481,7 +481,13 @@ class TransformerSampler:
         """
         Applies a frequency penalty to the logits.
         """
-        raise NotImplementedError()
+        frequency = t.bincount(input_ids)
+        # Extend the tensor to be the vocab size, even if there are no occurences at those higher token indices.
+        target_length = logits.shape[-1]
+        padded = t.zeros(target_length).to(device)
+        padded[:len(frequency)] = frequency
+
+        return logits - padded*freq_penalty
 
     @staticmethod
     def sample_basic(logits: Float[Tensor, "d_vocab"]) -> int:
