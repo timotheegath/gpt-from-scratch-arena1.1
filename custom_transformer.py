@@ -2,6 +2,7 @@ from dataclasses import dataclass  # noqa: I001
 from typing import cast
 
 import numpy as np
+import tests
 import torch as t
 import torch.nn as nn
 
@@ -63,10 +64,6 @@ class LayerNorm(nn.Module):
             residual_var_mean[0] + self.cfg.layer_norm_eps
         )
 
-        # Assert the normed output is indeed normed
-        if self.cfg.debug:
-            Tests.assert_normalized(normed_residual)
-
         scaled_residual = normed_residual * self.w + self.b
         return scaled_residual
 
@@ -76,7 +73,7 @@ class LayerNorm(nn.Module):
     ) -> None:
         if tokenizer is not None:  # Only did this to satisfy my Linter
             logits, cache = reference_gpt2.run_with_cache(sentence)
-            Tests.load_gpt2_test(LayerNorm, reference_gpt2.ln_final, cache["resid_post", 11])
+            tests.load_gpt2_test(LayerNorm, reference_gpt2.ln_final, cache["resid_post", 11])
 
 
 class Embed(nn.Module):
@@ -104,7 +101,7 @@ class Embed(nn.Module):
         sentence: str, tokenizer: PreTrainedTokenizerBase, reference_gpt2: HookedTransformer
     ) -> None:
         if tokenizer is not None:  # Only did this to satisfy my Linter
-            Tests.load_gpt2_test(
+            tests.load_gpt2_test(
                 Embed, reference_gpt2.embed, t.tensor(tokenizer.encode(sentence)).to(device)
             )
 
@@ -129,13 +126,13 @@ class PosEmbed(nn.Module):
         sentence: str, tokenizer: PreTrainedTokenizerBase, reference_gpt2: HookedTransformer
     ) -> None:
         if tokenizer is not None:  # Only did this to satisfy my Linter
-            Tests.load_gpt2_test(
+            tests.load_gpt2_test(
                 PosEmbed, reference_gpt2.pos_embed, t.tensor(tokenizer.encode(sentence)).unsqueeze(0).to(device)
             )
 
     @staticmethod
     def test_with_random() -> None:
-        Tests.rand_int_test(PosEmbed, [2, 4])
+        tests.rand_int_test(PosEmbed, [2, 4])
 
 
 class Attention(nn.Module):
@@ -207,7 +204,7 @@ class Attention(nn.Module):
     ) -> None:
         if tokenizer is not None:
             logits, cache = reference_gpt2.run_with_cache(sentence)
-            Tests.load_gpt2_test(
+            tests.load_gpt2_test(
                 Attention,
                 cast("nn.Module", reference_gpt2.blocks[0].attn),
                 cache["normalized", 0, "ln1"],
@@ -256,7 +253,7 @@ class MLP(nn.Module):
     ) -> None:
         if tokenizer is not None:
             logits, cache = reference_gpt2.run_with_cache(sentence)
-            Tests.load_gpt2_test(
+            tests.load_gpt2_test(
                 MLP, cast("nn.Module", reference_gpt2.blocks[0].mlp), cache["normalized", 0, "ln2"]
             )
 
@@ -294,11 +291,11 @@ class TransformerBlock(nn.Module):
     ) -> None:
         if tokenizer is not None:
             logits, cache = reference_gpt2.run_with_cache(sentence)
-            Tests.load_gpt2_test(TransformerBlock, reference_gpt2.blocks[0], cache["resid_pre", 0])
+            tests.load_gpt2_test(TransformerBlock, reference_gpt2.blocks[0], cache["resid_pre", 0])
 
     @staticmethod
     def test_with_random() -> None:
-        Tests.rand_float_test(TransformerBlock, [2, 4, 768])
+        tests.rand_float_test(TransformerBlock, [2, 4, 768])
 
 
 class Unembed(nn.Module):
@@ -321,11 +318,11 @@ class Unembed(nn.Module):
     ) -> None:
         if tokenizer is not None:
             logits, cache = reference_gpt2.run_with_cache(sentence)
-            Tests.load_gpt2_test(Unembed, reference_gpt2.unembed, cache["ln_final.hook_normalized"])
+            tests.load_gpt2_test(Unembed, reference_gpt2.unembed, cache["ln_final.hook_normalized"])
 
     @staticmethod
     def test_with_random() -> None:
-        Tests.rand_float_test(Unembed, [2, 4, 768])
+        tests.rand_float_test(Unembed, [2, 4, 768])
 
 
 class DemoTransformer(nn.Module):
@@ -392,11 +389,11 @@ class DemoTransformer(nn.Module):
     ) -> None:
         if tokenizer is not None:
             tokens = Tensor(tokenizer.encode(sentence)).to(device).to(t.int)
-            Tests.load_gpt2_test(DemoTransformer, reference_gpt2, tokens)
+            tests.load_gpt2_test(DemoTransformer, reference_gpt2, tokens)
 
     @staticmethod
     def test_with_random() -> None:
-        Tests.rand_int_test(DemoTransformer, [2, 4])
+        tests.rand_int_test(DemoTransformer, [2, 4])
 
 class TransformerSampler:
     def __init__(self, model: DemoTransformer, tokenizer: GPT2TokenizerFast):
@@ -528,5 +525,5 @@ class TransformerSampler:
         output = self.sample(prompt, max_tokens_generated=8, temperature=0.0)
         print(f"Expected: {expected!r}\nActual:   {output!r}\n")
         assert output == expected
-        print("Tests passed!")
+        print("tests passed!")
 

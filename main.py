@@ -12,7 +12,8 @@ from tests import test_sample_basic
 device = t.device(
     "mps" if t.backends.mps.is_available() else "cuda" if t.cuda.is_available() else "cpu"
 )
-model_cfg = Config(
+# Training model config
+""" model_cfg = Config(
     debug=False,
     d_model=32,
     n_heads=16,
@@ -21,19 +22,14 @@ model_cfg = Config(
     n_layers=4,
     n_ctx=128,
     # d_vocab will be taken from the ref model automatically
-)
-model = DemoTransformer(model_cfg).to(device)
-modelTrained = HookedTransformer.from_pretrained(
-            "gpt2-small",
-            fold_ln=False,
-            center_unembed=False,
-            center_writing_weights=False,  # you'll learn about these arguments later!
-        )
+) """
+model = DemoTransformer(Config()).to(device)
+model.load_pretrained_weights_from_reference()
 sampler = TransformerSampler(model, model.tokenizer) # type: ignore
 test_sample_basic(sampler.sample_basic)
 prompt = "John and Mary went to the"
 input_ids = Tensor(model.tokenizer.encode(prompt, return_tensors="pt")).to(device)
-logits = modelTrained(input_ids)[0, -1]
+logits = model(input_ids)[0, -1]
 
 expected_top_5 = {
     " church": 0.0648,
