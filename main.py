@@ -1,6 +1,7 @@
 from collections import defaultdict
 
 import torch as t
+from torch import Tensor
 from tqdm import tqdm
 
 from custom_transformer import Config, DemoTransformer, TransformerSampler
@@ -24,7 +25,7 @@ model = DemoTransformer(model_cfg).to(device)
 sampler = TransformerSampler(model, model.tokenizer) # type: ignore
 test_sample_basic(sampler.sample_basic)
 prompt = "John and Mary went to the"
-input_ids = model.tokenizer.encode(prompt, return_tensors="pt").to(device)
+input_ids = Tensor(model.tokenizer.encode(prompt, return_tensors="pt")).to(device)
 logits = model(input_ids)[0, -1]
 
 expected_top_5 = {
@@ -34,12 +35,12 @@ expected_top_5 = {
     " same": 0.0104,
     " Church": 0.0097,
 }
-frequency_of_top_5 = defaultdict(int)
+frequency_of_top_5: defaultdict[str, int] = defaultdict(int)
 
 N = 10_000
 for _ in tqdm(range(N)):
     token = TransformerSampler.sample_next_token(input_ids.squeeze(), logits)
-    frequency_of_top_5[model.tokenizer.decode(token)] += 1
+    frequency_of_top_5[str(model.tokenizer.decode(token))] += 1
 
 for word in expected_top_5:
     expected_freq = expected_top_5[word]
