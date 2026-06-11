@@ -485,7 +485,9 @@ class TransformerSampler:
         if seed is not None:
             t.manual_seed(seed)
             np.random.seed(seed)
-        raise NotImplementedError()
+        input_tokens = Tensor(self.tokenizer.encode(prompt)).to(t.int).to(device)
+        
+
 
     @staticmethod
     def sample_next_token(
@@ -575,33 +577,12 @@ class TransformerSampler:
         we've generated `num_returns_sequences` terminating sequences.
         """
         raise NotImplementedError()
+    def test_greedy(self) -> None:
+        expected = "Jingle bells, jingle bells, jingle all the way up to the top of the mountain."
+        prompt = "Jingle bells, jingle bells, jingle all the way"
+        print(f"Testing greedy decoding\nPrompt:   {prompt!r}")
+        output = self.sample(prompt, max_tokens_generated=8, temperature=0.0)
+        print(f"Expected: {expected!r}\nActual:   {output!r}\n")
+        assert output == expected
+        print("Tests passed!")
 
-
-model = DemoTransformer(Config()).to(device)
-model.load_state_dict(reference_gpt2.state_dict(), strict=False)
-tokenizer = reference_gpt2.tokenizer
-sampler = TransformerSampler(model, tokenizer)
-
-prompt = "Jingle bells, jingle bells, jingle all the way"
-print(f"Testing greedy decoding\nPrompt:   {prompt!r}")
-
-expected = "Jingle bells, jingle bells, jingle all the way up to the top of the mountain."
-output = sampler.sample(prompt, max_tokens_generated=8, temperature=0.0)
-
-print(f"Expected: {expected!r}\nActual:   {output!r}\n")
-assert output == expected
-
-print("Tests passed!")
-
-if __name__ == "__main__":
-    cache = None
-    sentence = "When will the earth stop moving ? Or when will the pigs fly ?"
-    
-    demo_gpt2 = DemoTransformer(Config(debug=False)).to(device)
-    PosEmbed.test(sentence, demo_gpt2.tokenizer, demo_gpt2.reference)
-    # demo_gpt2.load_pretrained_weights_from_reference()
-    # tokens = Tensor(tokenizer.encode(sentence)).to(t.int).to(device).unsqueeze(0)
-    # demo_logits = demo_gpt2(tokens)
-    # pred_log_probs = get_log_probs(demo_logits, tokens)
-    # full_sentence = demo_gpt2.complete_text(sentence, 100)
-    # print(full_sentence)

@@ -1,6 +1,11 @@
-from custom_transformer import Config, DemoTransformer
+import torch as t
+
+from custom_transformer import Config, DemoTransformer, TransformerSampler
 from training import TransformerTrainer, TransformerTrainingArgs
 
+device = t.device(
+    "mps" if t.backends.mps.is_available() else "cuda" if t.cuda.is_available() else "cpu"
+)
 model_cfg = Config(
     debug=False,
     d_model=32,
@@ -11,10 +16,8 @@ model_cfg = Config(
     n_ctx=128,
     # d_vocab will be taken from the ref model automatically
 )
-model = DemoTransformer(model_cfg)
-training_params = TransformerTrainingArgs()
-assert model.reference.tokenizer is not None
-trainer = TransformerTrainer(training_params, model)
-trainer.train()
-print()
-# See the full run here: https://api.wandb.ai/links/dquarel/nrxuwnv7
+model = DemoTransformer(model_cfg).to(device)
+sampler = TransformerSampler(model, model.tokenizer) # type: ignore
+sampler.test_greedy()
+
+
