@@ -5,6 +5,7 @@ from torch import Tensor
 from tqdm import tqdm
 
 from custom_transformer import Config, DemoTransformer, TransformerSampler
+from transformer_lens import HookedTransformer
 from training import TransformerTrainer, TransformerTrainingArgs
 from tests import test_sample_basic
 
@@ -22,11 +23,17 @@ model_cfg = Config(
     # d_vocab will be taken from the ref model automatically
 )
 model = DemoTransformer(model_cfg).to(device)
+modelTrained = HookedTransformer.from_pretrained(
+            "gpt2-small",
+            fold_ln=False,
+            center_unembed=False,
+            center_writing_weights=False,  # you'll learn about these arguments later!
+        )
 sampler = TransformerSampler(model, model.tokenizer) # type: ignore
 test_sample_basic(sampler.sample_basic)
 prompt = "John and Mary went to the"
 input_ids = Tensor(model.tokenizer.encode(prompt, return_tensors="pt")).to(device)
-logits = model(input_ids)[0, -1]
+logits = modelTrained(input_ids)[0, -1]
 
 expected_top_5 = {
     " church": 0.0648,
@@ -37,7 +44,7 @@ expected_top_5 = {
 }
 frequency_of_top_5: defaultdict[str, int] = defaultdict(int)
 
-N = 10_000
+N = 10_0000
 for _ in tqdm(range(N)):
     token = TransformerSampler.sample_next_token(input_ids.squeeze(), logits)
     frequency_of_top_5[str(model.tokenizer.decode(token))] += 1
