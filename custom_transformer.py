@@ -480,15 +480,19 @@ class TransformerSampler:
         passed to sample_next_token, to give detailed instructions on how new tokens are chosen. 
         Pass `seed` to make generation reproducible.
         """
+        sequence: list[str] = []
         self.model.eval()
         seed = kwargs.pop("seed", None)
         if seed is not None:
             t.manual_seed(seed)
             np.random.seed(seed)
-        input_tokens = Tensor(self.tokenizer.encode(prompt)).to(t.int).to(device).unsqueeze(0)
-        logits:  Float[Tensor, "batch position d_vocab"] = self.model.forward(input_tokens) # For sampling, shouldn't we just keep the last position ? I will just keep the last position for now:
-        last_logits: Float[Tensor, "batch d_vocab"] = logits[:, -1, :]
-                
+        while len(sequence) <= max_tokens_generated and sequence[-1] != self.tokenizer.eos_token_id:
+            prompt_with_new_seq = prompt + "".join(sequence)
+            input_tokens = Tensor(self.tokenizer.encode(prompt_with_new_seq)).to(t.int).to(device).unsqueeze(0)
+            logits:  Float[Tensor, "batch position d_vocab"] = self.model.forward(input_tokens) # For sampling, shouldn't we just keep the last position ? I will just keep the last position for now:
+            last_logits: Float[Tensor, "batch d_vocab"] = logits[:, -1, :]
+            next_token = self.sample_next_token(input_tokens, last_logits)
+            sequence.append(str(self.tokenizer.decode(next_token))) # Add the new word to the sequence
         return ""
 
 
