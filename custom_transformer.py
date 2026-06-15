@@ -580,7 +580,19 @@ class TransformerSampler:
             Optional argument `no_repeat_ngram_size` means your model won't generate any sequences with a repeating n-gram
             of this length.
             """
-            raise NotImplementedError()
+            logits : Float[Tensor, "batch d_vocab"] = self.model.forward(self.tokens)[:, -1, :] # We only care about the last position's eval
+            if no_repeat_ngram_size:
+                window = self.tokens[:, -no_repeat_ngram_size:]  # [batch, ngram_size]        
+                # Create a mask: [batch, d_vocab]
+                mask = t.zeros_like(logits, dtype=t.bool).to(device)
+                for batch_idx in range(window.shape[0]):
+                    mask[batch_idx, window[batch_idx]] = True
+                logits[mask] = 0
+            log_probs: Float[Tensor, "batch d_vocab"]= t.log_softmax(logits, dim =-1)
+            top_log_probs, top_tokens = t.sort(log_probs, dim=-1, descending=True)  # (Float[Tensor, "batch d_vocab"],Int[Tensor, "batch d_vocab"])
+            new_log_prob_sums: Float[Tensor, " batch*k"] = (self.logprob_sums.unsqueeze(0) + top_log_probs[:,:k]).flatten()
+            new_tokens = t.cat([t.repeat_interleave(self.tokens, k,dim=0), top_tokens[:, :k].flatten().unsqueeze((-1))], dim=1)  # [batch, seq_len + 3]
+            return TransformerSampler.Beams(self.model, self.tokenizer, new_log_prob_sums, new_tokens)            
 
         def filter(self, k: int) -> tuple["TransformerSampler.Beams", "TransformerSampler.Beams"]:
             """
@@ -606,7 +618,7 @@ class TransformerSampler:
                     text = str(text[: int(0.3 * max_print_chars)]) + " ... " + str(text[-int(0.7 * max_print_chars) :]) # type: ignore
                 table.add_row(f"{logprob_sum:>8.3f}", repr(text))
             print(table)
-
+      
 
     @t.inference_mode()
     def beam_search(
@@ -635,6 +647,7 @@ class TransformerSampler:
 
             # Generate & filter beams
             best_beams = best_beams.generate(k=num_beams, no_repeat_ngram_size=no_repeat_ngram_size)
+            best_beams.print()
             best_beams, best_beams_terminated = best_beams.filter(k=num_beams)
 
             # Add terminated beams to our list, and return early if we have enough

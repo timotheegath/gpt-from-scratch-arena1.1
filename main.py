@@ -30,7 +30,10 @@ model.load_pretrained_weights_from_reference()
 sampler = TransformerSampler(model, model.tokenizer)  # type: ignore
 
 your_prompt = "In a shocking finding, scientist discovered a herd of unicorns living in a remote, previously unexplored valley, in the Andes Mountains. Even more surprising to the researchers was the fact that the unicorns spoke perfect English."
+orig_len = len(sampler.tokenizer.encode(your_prompt))
+final_logitsums_and_completions = sampler.beam_search(your_prompt, 3, 40, 60, 2)
+# Print all the best output
+for logprob_sum, text in final_logitsums_and_completions:
+    avg_logprob_as_prob = t.tensor(logprob_sum / (len(sampler.tokenizer.encode(text)) - orig_len)).exp()
+    print(f"Avg token prob = {avg_logprob_as_prob:.3f}\nBest output:\n[bold dark_orange]{text}")
 
-output = sampler.sample(your_prompt, temperature=0.7, top_p=0.95, max_tokens_generated=64)
-
-print(f"Your model said:\n\n[bold dark_orange]{output}")
