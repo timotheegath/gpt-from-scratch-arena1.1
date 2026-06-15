@@ -14,6 +14,8 @@ from transformer_lens import HookedTransformer
 from transformer_lens.utilities.activation_functions import gelu_new
 from transformers import PreTrainedTokenizerBase
 from transformers.models.gpt2.tokenization_gpt2 import GPT2Tokenizer as GPT2TokenizerFast
+from wandb import Table
+
 # from training import get_log_probs
 
 # ruff: noqa: F722, F821
@@ -540,6 +542,72 @@ class TransformerSampler:
         distrib = t.distributions.Categorical(logits=output_logits)
         return int(distrib.sample())
 
+    def test_greedy(self) -> None:
+        expected = "Jingle bells, jingle bells, jingle all the way up to the top of the mountain."
+        prompt = "Jingle bells, jingle bells, jingle all the way"
+        print(f"Testing greedy decoding\nPrompt:   {prompt!r}")
+        output = self.sample(prompt, max_tokens_generated=8, temperature=0.0)
+        print(f"Expected: {expected!r}\nActual:   {output!r}\n")
+        assert output == expected
+        print("tests passed!")
+
+    @dataclass
+    class Beams:
+        """Class to store beams during beam search."""
+
+        model: DemoTransformer
+        tokenizer: GPT2TokenizerFast
+        logprob_sums: Float[Tensor, " batch"]
+        tokens: Int[Tensor, "batch seq"]
+
+        def __getitem__(self, batch_idx) -> "TransformerSampler.Beams":
+            """Allows you to create new beams from old beams by slicing along batch dim (useful for `filter`)."""
+            return TransformerSampler.Beams(self.model, self.tokenizer, self.logprob_sums[batch_idx], self.tokens[batch_idx])
+
+        @property
+        def logprobs_and_completions(self) -> list[tuple[float, str]]:
+            """Returns self as a list of logprob sums and completions (useful for getting final output)."""
+            return [
+                (float(logprob_sum.item()), str(self.tokenizer.decode(tokens)))
+                for (logprob_sum, tokens) in zip(self.logprob_sums, self.tokens)
+            ] # type: ignore
+
+        def generate(self, k: int, no_repeat_ngram_size: int | None = None) -> "TransformerSampler.Beams":
+            """
+            Starting from the current set of beams (i.e. self.tokens) and returns a new set of `len(self.tokens) * k` beams,
+            containing the best `k` continuations for each of the original beams.
+
+            Optional argument `no_repeat_ngram_size` means your model won't generate any sequences with a repeating n-gram
+            of this length.
+            """
+            raise NotImplementedError()
+
+        def filter(self, k: int) -> tuple["TransformerSampler.Beams", "TransformerSampler.Beams"]:
+            """
+            Returns:
+                best_beams: Beams
+                    filtered version of self, containing all best `k` which are also not terminated.
+                early_terminations: Beams
+                    filtered version of self, containing all best `k` which are also terminated.
+            """
+            raise NotImplementedError()
+
+
+        def print(self, title="Best completions", max_print_chars=80) -> None:
+            """
+            Prints out a set of sequences with their corresponding logprob sums.
+            """
+            if len(self.tokens) == 0:
+                return
+            table = Table(columns=["logprob sum", "completion"])
+            for logprob_sum, tokens in zip(self.logprob_sums, self.tokens):
+                text = self.tokenizer.decode(tokens)
+                if len(repr(text)) > max_print_chars:
+                    text = str(text[: int(0.3 * max_print_chars)]) + " ... " + str(text[-int(0.7 * max_print_chars) :]) # type: ignore
+                table.add_row(f"{logprob_sum:>8.3f}", repr(text))
+            print(table)
+
+
     @t.inference_mode()
     def beam_search(
         self,
@@ -554,13 +622,26 @@ class TransformerSampler:
         prompt) until either of the two stopping criteria are met: (1) we've generated `max_new_tokens` tokens, or (2)
         we've generated `num_returns_sequences` terminating sequences.
         """
-        raise NotImplementedError()
+        assert num_return_sequences <= num_beams
+        self.model.eval()
 
-    def test_greedy(self) -> None:
-        expected = "Jingle bells, jingle bells, jingle all the way up to the top of the mountain."
-        prompt = "Jingle bells, jingle bells, jingle all the way"
-        print(f"Testing greedy decoding\nPrompt:   {prompt!r}")
-        output = self.sample(prompt, max_tokens_generated=8, temperature=0.0)
-        print(f"Expected: {expected!r}\nActual:   {output!r}\n")
-        assert output == expected
-        print("tests passed!")
+        tokens = Tensor(self.tokenizer.encode(prompt, return_tensors="pt")).to(device)
+
+        final_logprobs_and_completions = []  # we add to this list as we get terminated beams
+        best_beams = self.Beams(self.model, self.tokenizer, t.tensor([0.0]).to(device), tokens)  # start with just 1 beam
+
+        for _ in tqdm(range(max_new_tokens)):
+            t.cuda.empty_cache()
+
+            # Generate & filter beams
+            best_beams = best_beams.generate(k=num_beams, no_repeat_ngram_size=no_repeat_ngram_size)
+            best_beams, best_beams_terminated = best_beams.filter(k=num_beams)
+
+            # Add terminated beams to our list, and return early if we have enough
+            final_logprobs_and_completions.extend(best_beams_terminated.logprobs_and_completions)
+            if len(final_logprobs_and_completions) >= num_return_sequences:
+                return final_logprobs_and_completions[:num_return_sequences]
+
+        # Return terminated beams plus the best ongoing beams of length `orig_len + max_new_tokens`
+        final_logprobs_and_completions.extend(best_beams.logprobs_and_completions)
+        return final_logprobs_and_completions[:num_return_sequences]
