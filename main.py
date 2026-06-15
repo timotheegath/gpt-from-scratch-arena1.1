@@ -31,7 +31,7 @@ sampler = TransformerSampler(model, model.tokenizer)  # type: ignore
 
 your_prompt = "In a shocking finding, scientist discovered a herd of unicorns living in a remote, previously unexplored valley, in the Andes Mountains. Even more surprising to the researchers was the fact that the unicorns spoke perfect English."
 orig_len = len(sampler.tokenizer.encode(your_prompt))
-final_logitsums_and_completions = sampler.beam_search(your_prompt, 3, 40, 60, 2)
+final_logitsums_and_completions = sampler.beam_search(your_prompt, 3, 40, 60, 3)
 # Print all the best output
 for logprob_sum, text in final_logitsums_and_completions:
     avg_logprob_as_prob = t.tensor(logprob_sum / (len(sampler.tokenizer.encode(text)) - orig_len)).exp()

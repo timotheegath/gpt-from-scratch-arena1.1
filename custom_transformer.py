@@ -580,19 +580,43 @@ class TransformerSampler:
             Optional argument `no_repeat_ngram_size` means your model won't generate any sequences with a repeating n-gram
             of this length.
             """
-            logits : Float[Tensor, "batch d_vocab"] = self.model.forward(self.tokens)[:, -1, :] # We only care about the last position's eval
+            # Here my implementation didn't work, I misunerstood which tokens shuold be considered for repetition
+            """ logits : Float[Tensor, "batch d_vocab"] = self.model.forward(self.tokens)[:, -1, :] # We only care about the last position's eval
             if no_repeat_ngram_size:
-                window = self.tokens[:, -no_repeat_ngram_size:]  # [batch, ngram_size]        
-                # Create a mask: [batch, d_vocab]
-                mask = t.zeros_like(logits, dtype=t.bool).to(device)
-                for batch_idx in range(window.shape[0]):
-                    mask[batch_idx, window[batch_idx]] = True
-                logits[mask] = 0
+                tokens_to_avoid = self.tokens[:, -no_repeat_ngram_size:]  # [batch, ngram_size]
+                # Set the logits of the repeated tokens to 0 for each beam
+                rows = t.arange(logits.size(0), device=logits.device).unsqueeze(1)
+                logits[rows, tokens_to_avoid] = t.tensor(-float("inf"))
             log_probs: Float[Tensor, "batch d_vocab"]= t.log_softmax(logits, dim =-1)
             top_log_probs, top_tokens = t.sort(log_probs, dim=-1, descending=True)  # (Float[Tensor, "batch d_vocab"],Int[Tensor, "batch d_vocab"])
-            new_log_prob_sums: Float[Tensor, " batch*k"] = (self.logprob_sums.unsqueeze(0) + top_log_probs[:,:k]).flatten()
-            new_tokens = t.cat([t.repeat_interleave(self.tokens, k,dim=0), top_tokens[:, :k].flatten().unsqueeze((-1))], dim=1)  # [batch, seq_len + 3]
-            return TransformerSampler.Beams(self.model, self.tokenizer, new_log_prob_sums, new_tokens)            
+            # Now expand the batch of beamsto include k* more options
+            new_log_prob_sums: Float[Tensor, " batch*k"] = (self.logprob_sums.unsqueeze(1) + top_log_probs[:,:k]).flatten()
+            new_tokens: Int[Tensor, " batch*k seq+1"] = t.cat([t.repeat_interleave(self.tokens, k,dim=0), top_tokens[:, :k].flatten().unsqueeze((-1))], dim=1)  # [batch, seq_len + 3]
+            return TransformerSampler.Beams(self.model, self.tokenizer, new_log_prob_sums, new_tokens) """
+            logprobs = self.model(self.tokens)[:, -1, :].log_softmax(-1)
+             # If completion isn't long enough for a repetition, or we have no restrictions, just return topk
+            batch, seq_len = self.tokens.shape
+            if (no_repeat_ngram_size is not None) and (seq_len > no_repeat_ngram_size - 1):
+                # Otherwise, we need to check for ngram repetitions
+                # First, get the most recent `no_repeat_ngram_size-1` tokens
+                last_ngram_prefix = self.tokens[:, seq_len - (no_repeat_ngram_size - 1) :]
+                # Next, find all the tokens we're not allowed to generate, by checking all past ngrams for a match
+                for i in range(seq_len - (no_repeat_ngram_size - 1)):
+                    ngrams = self.tokens[:, i : i + no_repeat_ngram_size]  # (batch, ngram)
+                    ngrams_are_repeated = (ngrams[:, :-1] == last_ngram_prefix).all(-1)  # (batch,)
+                    ngram_end_tokens = ngrams[:, [-1]]  # (batch, 1)
+                    # Fill logprobs with neginf wherever the ngrams are repeated
+                    logprobs[range(batch), ngram_end_tokens] = t.where(
+                        ngrams_are_repeated, -1.0e4, logprobs[range(batch), ngram_end_tokens]
+                    )
+                    topk_logprobs, topk_tokenIDs = logprobs.topk(k=k, dim=-1)
+
+            new_logprob_sums: Float[Tensor, " batch*k"] = (self.logprob_sums.unsqueeze(1) + topk_logprobs).flatten()
+            new_tokens: Int[Tensor, " batch*k seq+1"] = t.cat([t.repeat_interleave(self.tokens, k,dim=0), topk_tokenIDs.flatten().unsqueeze((-1))], dim=1)  # [batch, seq_len + 3]
+
+            return TransformerSampler.Beams(self.model, self.tokenizer, new_logprob_sums, new_tokens)
+            # Finally, get our actual tokens
+
 
         def filter(self, k: int) -> tuple["TransformerSampler.Beams", "TransformerSampler.Beams"]:
             """
@@ -602,7 +626,12 @@ class TransformerSampler:
                 early_terminations: Beams
                     filtered version of self, containing all best `k` which are also terminated.
             """
-            raise NotImplementedError()
+            top_indices = t.argsort(self.logprob_sums, descending=True)[:k].tolist()
+
+            terminated_indices = t.nonzero(self.tokens[:, -1] == self.tokenizer.eos_token_id) # type: ignore
+            best_continuing = [i for i in top_indices if i not in terminated_indices]
+            best_terminated = [i for i in top_indices if i in terminated_indices]
+            return self[best_continuing], self[best_terminated]
 
 
         def print(self, title="Best completions", max_print_chars=80) -> None:
