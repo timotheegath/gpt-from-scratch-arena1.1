@@ -532,10 +532,10 @@ class TransformerSampler:
 
         sorted_probs, indices = t.sort(t.softmax(logits, -1), descending=True) # Sorts from highest logit to lowest
         index_where_top_p_reached = t.argwhere(t.cumsum(sorted_probs, -1) >= top_p)[0] # Take the fist index where we have a cumsum bigger or equal to top_p
-        target_index = index_where_top_p_reached if index_where_top_p_reached > min_tokens_to_keep else min_tokens_to_keep
+        target_index = index_where_top_p_reached + 1 if index_where_top_p_reached +1 > min_tokens_to_keep else min_tokens_to_keep
         # Set everything but the logits to keep to 0
         output_logits = t.zeros_like(logits)
-        output_logits[indices[:target_index+1]] = logits[indices[:target_index+1]]
+        output_logits[indices[:target_index]] = logits[indices[:target_index]]
         # Reconstitute the categorical distribution
         distrib = t.distributions.Categorical(logits=output_logits)
         return int(distrib.sample())
