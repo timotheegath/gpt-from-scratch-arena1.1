@@ -338,7 +338,7 @@ class DemoTransformer(nn.Module):
         self.ln_final = LayerNorm(cfg)
         self.unembed = Unembed(cfg)
         self.reference = HookedTransformer.from_pretrained(
-            "gpt2-small",
+            "gpt2",
             fold_ln=False,
             center_unembed=False,
             center_writing_weights=False,  # you'll learn about these arguments later!
@@ -501,9 +501,7 @@ class TransformerSampler:
         target_length = logits.shape[-1]
         padded = t.zeros(target_length).to(device)
         padded[: len(frequency)] = frequency
-        logits_post_penalty = logits - padded * freq_penalty
-
-        return logits_post_penalty
+        return logits - padded * freq_penalty
 
     @staticmethod
     def sample_basic(logits: Float[Tensor, "d_vocab"]) -> int:
@@ -531,7 +529,16 @@ class TransformerSampler:
         """
         Samples from the most likely tokens which make up at least p cumulative probability.
         """
-        raise NotImplementedError()
+
+        sorted_probs, indices = t.sort(t.softmax(logits, -1), descending=True) # Sorts from highest logit to lowest
+        index_where_top_p_reached = t.argwhere(t.cumsum(sorted_probs, -1) >= top_p)[0] # Take the fist index where we have a cumsum bigger or equal to top_p
+        target_index = index_where_top_p_reached if index_where_top_p_reached > min_tokens_to_keep else min_tokens_to_keep
+        # Set everything but the logits to keep to 0
+        output_logits = t.zeros_like(logits)
+        output_logits[indices[:target_index+1]] = logits[indices[:target_index+1]]
+        # Reconstitute the categorical distribution
+        distrib = t.distributions.Categorical(logits=output_logits)
+        return int(distrib.sample())
 
     @t.inference_mode()
     def beam_search(

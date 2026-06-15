@@ -29,22 +29,8 @@ model = DemoTransformer(Config()).to(device)
 model.load_pretrained_weights_from_reference()
 sampler = TransformerSampler(model, model.tokenizer)  # type: ignore
 
-N_RUNS = 2
-your_prompt = "Jingle bells, jingle bells, jingle all the way"
-cases = [
-    ("High freq penalty", dict(frequency_penalty=100.0)),
-    ("Negative freq penalty", dict(frequency_penalty=-3.0)),
-    ("Too hot!", dict(temperature=2.0)),
-    ("Pleasantly cool", dict(temperature=0.7)),
-    ("Pleasantly warm", dict(temperature=0.9)),
-    ("Too cold!", dict(temperature=0.01)),
-]
+your_prompt = "In a shocking finding, scientist discovered a herd of unicorns living in a remote, previously unexplored valley, in the Andes Mountains. Even more surprising to the researchers was the fact that the unicorns spoke perfect English."
 
-table = Table(columns=["Name", "Kwargs", "Output"])
-with wandb.init(project="temperature-penalty-test") as run:
-    for name, kwargs in cases:
-        for i in range(N_RUNS):
-            output = sampler.sample(your_prompt, max_tokens_generated=24)
-            table.add_row(name, str(kwargs), repr(output) + "\n")
-    run.log({"Sampling - Manual Testing": table})
-    print(table)
+output = sampler.sample(your_prompt, temperature=0.7, top_p=0.95, max_tokens_generated=64)
+
+print(f"Your model said:\n\n[bold dark_orange]{output}")
