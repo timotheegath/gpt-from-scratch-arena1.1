@@ -580,7 +580,9 @@ class TransformerSampler:
             Optional argument `no_repeat_ngram_size` means your model won't generate any sequences with a repeating n-gram
             of this length.
             """
-            # Here my implementation didn't work, I misunderstood which tokens shuold be considered for repetition
+            # Here my implementation didn't work, I misunderstood which tokens shuold be considered for repetition.
+            # I was finding individual tokens and flagging them as being repeated. Instead, I shoud have been comparing a sequence of tokens
+            # of length no_repeat_ngram_size
             """ logits : Float[Tensor, "batch d_vocab"] = self.model.forward(self.tokens)[:, -1, :] # We only care about the last position's eval
             if no_repeat_ngram_size:
                 tokens_to_avoid = self.tokens[:, -no_repeat_ngram_size:]  # [batch, ngram_size]
@@ -615,7 +617,6 @@ class TransformerSampler:
             new_tokens: Int[Tensor, " batch*k seq+1"] = t.cat([t.repeat_interleave(self.tokens, k,dim=0), topk_tokenIDs.flatten().unsqueeze((-1))], dim=1)  # [batch, seq_len + 3]
 
             return TransformerSampler.Beams(self.model, self.tokenizer, new_logprob_sums, new_tokens)
-            # Finally, get our actual tokens
 
 
         def filter(self, k: int) -> tuple["TransformerSampler.Beams", "TransformerSampler.Beams"]:
